@@ -1,11 +1,23 @@
-import { ChevronRight, Search, LogOut } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { ChevronRight, Search, LogOut, ChevronDown, Shield } from "lucide-react";
 import { ThemeToggle } from "../ui/ThemeToggle.jsx";
 
 /** @typedef {{ label: string, onClick?: () => void }} BreadcrumbItem */
 
-export function TopBar({ breadcrumbItems, user, onLogout, theme, onThemeChange }) {
+export function TopBar({ breadcrumbItems, user, onLogout, theme, onThemeChange, onOpenAdminPanel }) {
   const items = breadcrumbItems?.length ? breadcrumbItems : [{ label: "—" }];
   const initials = user.name.split(" ").map((n) => n[0]).join("").slice(0, 2);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [menuOpen]);
 
   return (
     <header
@@ -24,15 +36,12 @@ export function TopBar({ breadcrumbItems, user, onLogout, theme, onThemeChange }
         zIndex: 50,
       }}
     >
-      {/* ── Breadcrumbs ──────────────────────────────────────── */}
       <nav style={{ display: "flex", alignItems: "center", gap: 4 }} aria-label="Breadcrumb">
         {items.map((item, i) => {
           const isLast = i === items.length - 1;
           return (
             <span key={`${item.label}-${i}`} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              {i > 0 && (
-                <ChevronRight size={13} color="var(--text-4)" style={{ margin: "0 3px" }} />
-              )}
+              {i > 0 && <ChevronRight size={13} color="var(--text-4)" style={{ margin: "0 3px" }} />}
               {item.onClick ? (
                 <button
                   type="button"
@@ -82,7 +91,6 @@ export function TopBar({ breadcrumbItems, user, onLogout, theme, onThemeChange }
         })}
       </nav>
 
-      {/* ── Right rail ───────────────────────────────────────── */}
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <div
           style={{
@@ -137,40 +145,93 @@ export function TopBar({ breadcrumbItems, user, onLogout, theme, onThemeChange }
 
         <div style={{ width: 1, height: 26, background: "var(--border)" }} />
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ textAlign: "right", lineHeight: 1.25 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 600, letterSpacing: "-0.005em" }}>
-              {user.name}
-            </div>
-            <div style={{ fontSize: 11, color: "var(--text-3)" }}>{user.email}</div>
-          </div>
-          <div
-            style={{
-              width: 34,
-              height: 34,
-              background: "var(--text)",
-              color: "var(--surface)",
-              borderRadius: "50%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 12,
-              fontWeight: 700,
-              letterSpacing: "0.02em",
-              border: "1px solid var(--border)",
-            }}
-          >
-            {initials}
-          </div>
+        <div ref={wrapRef} style={{ position: "relative" }}>
           <button
             type="button"
-            onClick={onLogout}
-            className="btn-ghost btn"
-            title="Logout"
-            style={{ padding: "7px 9px" }}
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-expanded={menuOpen}
+            aria-haspopup="menu"
+            aria-label="User menu"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "4px 6px 4px 4px",
+              borderRadius: 10,
+              border: menuOpen ? "1px solid var(--accent-border)" : "1px solid transparent",
+              background: menuOpen ? "var(--surface-2)" : "transparent",
+              cursor: "pointer",
+              transition: "background 0.15s, border-color 0.15s",
+            }}
           >
-            <LogOut size={15} />
+            <div
+              style={{
+                width: 34,
+                height: 34,
+                background: "var(--text)",
+                color: "var(--surface)",
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 12,
+                fontWeight: 700,
+                letterSpacing: "0.02em",
+                border: "1px solid var(--border)",
+              }}
+            >
+              {initials}
+            </div>
+            <ChevronDown
+              size={16}
+              color="var(--text-3)"
+              style={{ transform: menuOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}
+            />
           </button>
+
+          {menuOpen && (
+            <div
+              className="profile-dropdown"
+              role="menu"
+              style={{
+                position: "absolute",
+                top: "calc(100% + 8px)",
+                right: 0,
+                minWidth: 200,
+                padding: "6px",
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
+                borderRadius: 10,
+                boxShadow: "var(--shadow-elevated)",
+                zIndex: 80,
+              }}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                className="profile-dropdown__item"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onOpenAdminPanel?.();
+                }}
+              >
+                <Shield size={16} color="var(--text-2)" />
+                Admin panel
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="profile-dropdown__item profile-dropdown__item--danger"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onLogout();
+                }}
+              >
+                <LogOut size={16} />
+                Log out
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </header>

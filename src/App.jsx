@@ -6,6 +6,7 @@ import { Sidebar } from "./components/layout/Sidebar.jsx";
 import { TopBar } from "./components/layout/TopBar.jsx";
 import { ResourceExplorer } from "./views/explorer/ResourceExplorer.jsx";
 import { DebugView } from "./views/debug/DebugCenter.jsx";
+import { AdminPanelView } from "./views/admin/AdminPanelView.jsx";
 import { INITIAL_FLOW } from "./utils/explorerHelpers.js";
 
 export default function App() {
@@ -39,6 +40,12 @@ export default function App() {
           onClick: () => setView("explorer"),
         },
         { label: "Debug Center" },
+      ];
+    }
+    if (view === "admin") {
+      return [
+        { label: "Resources", onClick: () => setView("explorer") },
+        { label: "Admin panel" },
       ];
     }
     const acc = state.accounts.find((a) => a.id === flow.accountId);
@@ -117,12 +124,14 @@ export default function App() {
           onLogout={() => setAuthed(false)}
           theme={theme}
           onThemeChange={setTheme}
+          onOpenAdminPanel={() => setView("admin")}
         />
         <div style={{ flex: 1, overflowY: "auto" }}>
           <div style={{ maxWidth: 1440, margin: "0 auto", padding: "40px 48px 64px" }}>
             {view === "explorer" && (
               <ResourceExplorer flow={flow} setFlow={setFlow} state={state} setState={setState} />
             )}
+            {view === "admin" && <AdminPanelView state={state} setState={setState} flow={flow} />}
             {view === "debug" && <DebugView state={state} />}
           </div>
         </div>

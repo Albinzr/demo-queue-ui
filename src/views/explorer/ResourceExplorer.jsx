@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
-import { Layers, Plus, GitBranch, X, ArrowRight } from "lucide-react";
+import { Layers, Plus, GitBranch, ArrowRight, RefreshCw } from "lucide-react";
 import { SectionHeader } from "../../components/ui/SectionHeader.jsx";
 import { Modal } from "../../components/ui/Modal.jsx";
 import { MetricCard, StatusBadge, Badge } from "../../components/ui/Badge.jsx";
@@ -18,7 +18,9 @@ import {
   segmentDensity,
   getShardList,
   getSegmentsForShard,
-  splitShardState,
+  splitShardToTargetCount,
+  closeSegmentState,
+  rolloverSegmentState,
 } from "../../utils/explorerHelpers.js";
 import { ScopedDebugPanel } from "../debug/ScopedDebugPanel.jsx";
 
@@ -74,6 +76,12 @@ export function ResourceExplorer({ flow, setFlow, state, setState }) {
   const [queueForm, setQueueForm] = useState({ name: "", shards: 2 });
   const [saForm, setSaForm] = useState({ name: "", permissions: [] });
   const [splitShardId, setSplitShardId] = useState(null);
+  const [splitTargetShards, setSplitTargetShards] = useState("");
+  const [namespaceHomeTab, setNamespaceHomeTab] = useState(/** @type {"queue" | "service_account"} */ ("queue"));
+
+  useEffect(() => {
+    setNamespaceHomeTab("queue");
+  }, [flow.namespaceId]);
 
   const namespace = flow.namespaceId ? state.namespaces.find((n) => n.id === flow.namespaceId) : null;
   const queue = flow.queueId ? state.queues.find((q) => q.id === flow.queueId) : null;
@@ -117,9 +125,26 @@ export function ResourceExplorer({ flow, setFlow, state, setState }) {
   const createAccount = () => {
     if (!accountForm.name.trim()) return;
     const id = `acc_${Date.now()}`;
+    const name = accountForm.name.trim();
+    const u = state.user;
+    const memberId = `m_${Date.now()}`;
+    const joinedAt = new Date().toISOString().slice(0, 10);
     setState({
       ...state,
-      accounts: [...state.accounts, { id, name: accountForm.name.trim(), created: new Date().toISOString().slice(0, 10) }],
+      accounts: [...state.accounts, { id, name, created: joinedAt }],
+      accountMembers: [
+        ...(state.accountMembers || []),
+        {
+          id: memberId,
+          accountId: id,
+          userId: u.id,
+          email: u.email,
+          name: u.name,
+          role: "owner",
+          joinedAt,
+        },
+      ],
+      user: { ...u, accountId: id, account: name },
     });
     setFlow({ accountId: id, namespaceId: null, queueId: null, shardId: null, segmentId: null });
     setAccountForm({ name: "" });
@@ -210,25 +235,59 @@ export function ResourceExplorer({ flow, setFlow, state, setState }) {
 
   const applySplit = () => {
     if (splitShardId == null || !queue) return;
-    setState((s) => splitShardState(s, queue.id, splitShardId));
+    const target = parseInt(splitTargetShards, 10);
+    if (!Number.isFinite(target) || target <= shards.length) return;
+    setState((s) => splitShardToTargetCount(s, queue.id, splitShardId, target));
     setSplitOpen(false);
     setSplitShardId(null);
+    setSplitTargetShards("");
   };
 
   /* ── Segment detail ─────────────────────────────────── */
   if (queue && shard && flow.segmentId && activeSegmentRow) {
     const segment = activeSegmentRow;
     const dens = segmentDensity(segment);
+    const qNsSeg = state.namespaces.find((n) => n.id === queue.namespace);
     return (
       <div className="fade-in">
         <SectionHeader
           title={segment.id}
           subtitle={`Shard ${shard.id} · ${queue.name}`}
-          action={
-            <button type="button" className="btn" onClick={() => setFlow({ ...flow, segmentId: null })}>
-              <X size={14} /> Back to shard
-            </button>
-          }
+          back={{
+            onClick: () => setFlow({ ...flow, segmentId: null }),
+            label: "Back to shard",
+          }}
+          breadcrumbItems={[
+            {
+              label: account?.name || "Account",
+              onClick: () =>
+                setFlow({
+                  accountId: flow.accountId,
+                  namespaceId: null,
+                  queueId: null,
+                  shardId: null,
+                  segmentId: null,
+                }),
+            },
+            {
+              label: qNsSeg?.name || queue.namespace,
+              onClick: () =>
+                setFlow({
+                  ...flow,
+                  queueId: null,
+                  shardId: null,
+                  segmentId: null,
+                }),
+            },
+            {
+              label: queue.name,
+              onClick: () => setFlow({ ...flow, shardId: null, segmentId: null }),
+            },
+            {
+              label: `Shard ${shard.id}`,
+              onClick: () => setFlow({ ...flow, segmentId: null }),
+            },
+          ]}
         />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 16, marginBottom: 28 }}>
           <MetricCard label="Messages" value={(segment.messageCount || 0).toLocaleString()} />
@@ -253,6 +312,30 @@ export function ResourceExplorer({ flow, setFlow, state, setState }) {
             <StatusBadge status={segment.status} />
           </div>
         </div>
+        {segment.status === "active" && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 24 }}>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                setState((s) => closeSegmentState(s, queue.id, shard.id, segment.id));
+                setFlow({ ...flow, segmentId: null });
+              }}
+            >
+              Close segment
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => {
+                setState((s) => rolloverSegmentState(s, queue.id, shard.id, segment.id));
+                setFlow({ ...flow, segmentId: null });
+              }}
+            >
+              <RefreshCw size={14} /> Rollover (new active segment)
+            </button>
+          </div>
+        )}
         <ScopedDebugPanel state={state} flow={flow} />
       </div>
     );
@@ -262,16 +345,40 @@ export function ResourceExplorer({ flow, setFlow, state, setState }) {
   if (queue && shard && flow.shardId != null && !(flow.segmentId && activeSegmentRow)) {
     const segs = getSegmentsForShard(state, queue.id, shard.id);
     const proc = Math.min(shard.writeQps || 0, shard.readQps || 0);
+    const qNsShard = state.namespaces.find((n) => n.id === queue.namespace);
     return (
       <div className="fade-in">
         <SectionHeader
           title={`Shard ${shard.id}`}
           subtitle={`${queue.name} · active segment ${shard.activeSegment}`}
-          action={
-            <button type="button" className="btn" onClick={() => setFlow({ ...flow, shardId: null, segmentId: null })}>
-              <X size={14} /> Back to queue
-            </button>
-          }
+          back={{
+            onClick: () => setFlow({ ...flow, shardId: null, segmentId: null }),
+            label: "Back to queue",
+          }}
+          breadcrumbItems={[
+            {
+              label: account?.name || "Account",
+              onClick: () =>
+                setFlow({
+                  accountId: flow.accountId,
+                  namespaceId: null,
+                  queueId: null,
+                  shardId: null,
+                  segmentId: null,
+                }),
+            },
+            {
+              label: qNsShard?.name || queue.namespace,
+              onClick: () =>
+                setFlow({
+                  ...flow,
+                  queueId: null,
+                  shardId: null,
+                  segmentId: null,
+                }),
+            },
+            { label: queue.name, onClick: () => setFlow({ ...flow, shardId: null, segmentId: null }) },
+          ]}
         />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 16, marginBottom: 32 }}>
           <MetricCard label="Messages (shard)" value={(shard.totalMessages || 0).toLocaleString()} />
@@ -280,13 +387,30 @@ export function ResourceExplorer({ flow, setFlow, state, setState }) {
           <MetricCard label="Lag" value={(shard.lag || 0).toLocaleString()} />
           <MetricCard label="Processing" value={String(proc)} unit="msg/s (min)" />
         </div>
-        <SubsectionHeader title="Segments" description="Open a segment for offset, density, and read/write detail." />
+        <SubsectionHeader
+          title="Segments"
+          description="Open a segment for offset, density, and read/write detail. Close seals the file; rollover closes the active segment and starts a new one."
+          action={
+            <button
+              type="button"
+              className="btn"
+              title="Close the current active segment and append a new empty segment"
+              onClick={() =>
+                setState((s) => rolloverSegmentState(s, queue.id, shard.id, null))
+              }
+            >
+              <RefreshCw size={14} /> Rollover active segment
+            </button>
+          }
+        />
         <SegmentView
           queueId={queue.id}
           shardId={shard.id}
           segments={state.segments}
           rows={segs}
           onSegmentClick={(seg) => openSegment(seg.id)}
+          onCloseSegment={(seg) => setState((s) => closeSegmentState(s, queue.id, shard.id, seg.id))}
+          onRolloverSegment={(seg) => setState((s) => rolloverSegmentState(s, queue.id, shard.id, seg.id))}
         />
         <ScopedDebugPanel state={state} flow={flow} />
       </div>
@@ -302,11 +426,27 @@ export function ResourceExplorer({ flow, setFlow, state, setState }) {
         <SectionHeader
           title={queue.name}
           subtitle={`${qNs?.name || queue.namespace} · ${shards.length} shards`}
-          action={
-            <button type="button" className="btn" onClick={() => setFlow({ ...flow, queueId: null, shardId: null, segmentId: null })}>
-              <X size={14} /> Back to namespace
-            </button>
-          }
+          back={{
+            onClick: () => setFlow({ ...flow, queueId: null, shardId: null, segmentId: null }),
+            label: "Back to namespace",
+          }}
+          breadcrumbItems={[
+            {
+              label: account?.name || "Account",
+              onClick: () =>
+                setFlow({
+                  accountId: flow.accountId,
+                  namespaceId: null,
+                  queueId: null,
+                  shardId: null,
+                  segmentId: null,
+                }),
+            },
+            {
+              label: qNs?.name || queue.namespace,
+              onClick: () => setFlow({ ...flow, queueId: null, shardId: null, segmentId: null }),
+            },
+          ]}
         />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 16, marginBottom: 24 }}>
           <MetricCard label="Total Messages" value={queue.totalMessages.toLocaleString()} />
@@ -377,6 +517,7 @@ export function ResourceExplorer({ flow, setFlow, state, setState }) {
               className="btn"
               onClick={() => {
                 setSplitShardId(shards[0]?.id ?? 0);
+                setSplitTargetShards(String(Math.min(32, shards.length + 1)));
                 setSplitOpen(true);
               }}
             >
@@ -425,9 +566,10 @@ export function ResourceExplorer({ flow, setFlow, state, setState }) {
           onClose={() => {
             setSplitOpen(false);
             setSplitShardId(null);
+            setSplitTargetShards("");
           }}
           title="Split shard"
-          subtitle="Divides one shard into two for rebalancing (mock — updates local state)"
+          subtitle="Choose which shard lineage to keep splitting and the target total shard count for this queue (mock — updates local state)."
         >
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div>
@@ -443,12 +585,41 @@ export function ResourceExplorer({ flow, setFlow, state, setState }) {
                 ))}
               </select>
             </div>
+            <div>
+              <label>Target shard count</label>
+              <input
+                type="number"
+                min={shards.length + 1}
+                max={32}
+                value={splitTargetShards}
+                onChange={(e) => setSplitTargetShards(e.target.value)}
+              />
+              <p style={{ fontSize: 12, color: "var(--text-3)", marginTop: 8, lineHeight: 1.5 }}>
+                Current: {shards.length}. Enter a number from {shards.length + 1} to 32. Each step splits the selected shard into two along the same lineage until the count is reached.
+              </p>
+            </div>
             <div className="modal-footer">
-              <button type="button" className="btn" onClick={() => setSplitOpen(false)}>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  setSplitOpen(false);
+                  setSplitShardId(null);
+                  setSplitTargetShards("");
+                }}
+              >
                 Cancel
               </button>
-              <button type="button" className="btn btn-primary" onClick={applySplit}>
-                <GitBranch size={13} /> Split
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={
+                  !Number.isFinite(parseInt(splitTargetShards, 10)) ||
+                  parseInt(splitTargetShards, 10) <= shards.length
+                }
+                onClick={applySplit}
+              >
+                <GitBranch size={13} /> Apply splits
               </button>
             </div>
           </div>
@@ -466,6 +637,30 @@ export function ResourceExplorer({ flow, setFlow, state, setState }) {
         <SectionHeader
           title={namespace.name}
           subtitle={namespace.description}
+          back={{
+            onClick: () =>
+              setFlow({
+                accountId: flow.accountId,
+                namespaceId: null,
+                queueId: null,
+                shardId: null,
+                segmentId: null,
+              }),
+            label: "Back to all namespaces",
+          }}
+          breadcrumbItems={[
+            {
+              label: account?.name || "Account",
+              onClick: () =>
+                setFlow({
+                  accountId: flow.accountId,
+                  namespaceId: null,
+                  queueId: null,
+                  shardId: null,
+                  segmentId: null,
+                }),
+            },
+          ]}
           action={
             <div style={{ display: "flex", gap: 8 }}>
               <button type="button" className="btn btn-primary" onClick={() => setCreateQueueOpen(true)}>
@@ -473,9 +668,6 @@ export function ResourceExplorer({ flow, setFlow, state, setState }) {
               </button>
               <button type="button" className="btn" onClick={() => setCreateSaOpen(true)}>
                 <Plus size={13} /> Service account
-              </button>
-              <button type="button" className="btn" onClick={() => setFlow({ accountId: flow.accountId, namespaceId: null, queueId: null, shardId: null, segmentId: null })}>
-                <X size={14} /> All namespaces
               </button>
             </div>
           }
@@ -493,13 +685,34 @@ export function ResourceExplorer({ flow, setFlow, state, setState }) {
             trend={nsMetrics.lag > 10000 ? "down" : "up"}
           />
         </div>
-        <SubsectionHeader title="Queues" description="Partitioned topics under this namespace." />
-        <QueueTable queues={nsQueues} namespaces={state.namespaces} onOpen={(q) => openQueue(q.id)} />
-
-        <div style={{ height: 40 }} />
-
-        <SubsectionHeader title="Service accounts" description="Scoped API access for producers and consumers." />
-        <ServiceAccountTable accounts={nsSAs} />
+        <div className="tab-bar" style={{ width: "fit-content", marginBottom: 20 }}>
+          <button
+            type="button"
+            className={`tab-btn${namespaceHomeTab === "queue" ? " active" : ""}`}
+            onClick={() => setNamespaceHomeTab("queue")}
+          >
+            Queue
+          </button>
+          <button
+            type="button"
+            className={`tab-btn${namespaceHomeTab === "service_account" ? " active" : ""}`}
+            onClick={() => setNamespaceHomeTab("service_account")}
+          >
+            Service account
+          </button>
+        </div>
+        {namespaceHomeTab === "queue" && (
+          <>
+            <SubsectionHeader title="Queues" description="Partitioned topics under this namespace." />
+            <QueueTable queues={nsQueues} namespaces={state.namespaces} onOpen={(q) => openQueue(q.id)} />
+          </>
+        )}
+        {namespaceHomeTab === "service_account" && (
+          <>
+            <SubsectionHeader title="Service accounts" description="Scoped API access for producers and consumers." />
+            <ServiceAccountTable accounts={nsSAs} />
+          </>
+        )}
 
         <ScopedDebugPanel state={state} flow={flow} />
 

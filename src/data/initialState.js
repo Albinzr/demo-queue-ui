@@ -5,11 +5,20 @@ export const INITIAL_STATE = {
     { id: "acc_02", name: "StartupX", created: "2026-02-15" },
   ],
   user: {
+    id: "u_me",
     name: "Aarav Mehta",
     email: "aarav@acmecorp.io",
     account: "Acme Corp",
     accountId: "acc_01",
   },
+  /** People on an account; role drives RBAC (see accountAccess.js). */
+  accountMembers: [
+    { id: "m_01", accountId: "acc_01", userId: "u_me", email: "aarav@acmecorp.io", name: "Aarav Mehta", role: "owner", joinedAt: "2026-01-01" },
+    { id: "m_02", accountId: "acc_01", userId: "u_jordan", email: "jordan@acmecorp.io", name: "Jordan Lee", role: "admin", joinedAt: "2026-01-10" },
+    { id: "m_03", accountId: "acc_01", userId: "u_sam", email: "sam@acmecorp.io", name: "Sam Rivera", role: "viewer", joinedAt: "2026-02-01" },
+    { id: "m_04", accountId: "acc_02", userId: "u_me", email: "aarav@acmecorp.io", name: "Aarav Mehta", role: "owner", joinedAt: "2026-02-15" },
+    { id: "m_05", accountId: "acc_02", userId: "u_taylor", email: "taylor@startupx.io", name: "Taylor Kim", role: "viewer", joinedAt: "2026-03-01" },
+  ],
   namespaces: [
     { id: "ns_01", accountId: "acc_01", name: "payments", created: "2026-01-14", description: "Payment processing & reconciliation pipeline", queues: ["q_01","q_02","q_03"], serviceAccounts: ["sa_01","sa_02"] },
     { id: "ns_02", accountId: "acc_01", name: "notifications", created: "2026-02-03", description: "Email, SMS, and push notification delivery", queues: ["q_04","q_05"], serviceAccounts: ["sa_03"] },

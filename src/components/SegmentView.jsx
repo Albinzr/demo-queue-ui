@@ -13,26 +13,37 @@ const defaultSeg = () => [
   },
 ];
 
-export function SegmentView({ queueId, shardId, segments, rows, onSegmentClick }) {
+export function SegmentView({
+  queueId,
+  shardId,
+  segments,
+  rows,
+  onSegmentClick,
+  onCloseSegment,
+  onRolloverSegment,
+}) {
   const key = `${queueId}_${shardId}`;
   const segs = rows ?? segments[key] ?? defaultSeg();
   const clickable = typeof onSegmentClick === "function";
+  const hasActions = typeof onCloseSegment === "function" || typeof onRolloverSegment === "function";
+  const gridCols = hasActions
+    ? "1.15fr 1fr 1fr 1fr 0.65fr 0.75fr 1.05fr 1.05fr minmax(168px, 1.4fr)"
+    : "1.2fr 1fr 1fr 1fr 0.7fr 0.8fr 1.2fr 1.2fr";
+  const headers = [
+    "Segment ID",
+    "Start Offset",
+    "End Offset",
+    "Messages",
+    "Size",
+    "Status",
+    "Created",
+    "Closed",
+  ];
+  if (hasActions) headers.push("Actions");
   return (
     <div className="data-table">
-      <div
-        className="table-header"
-        style={{ gridTemplateColumns: "1.2fr 1fr 1fr 1fr 0.7fr 0.8fr 1.2fr 1.2fr" }}
-      >
-        {[
-          "Segment ID",
-          "Start Offset",
-          "End Offset",
-          "Messages",
-          "Size",
-          "Status",
-          "Created",
-          "Closed",
-        ].map((h) => (
+      <div className="table-header" style={{ gridTemplateColumns: gridCols }}>
+        {headers.map((h) => (
           <span key={h}>{h}</span>
         ))}
       </div>
@@ -50,7 +61,7 @@ export function SegmentView({ queueId, shardId, segments, rows, onSegmentClick }
               : undefined
           }
           className={`table-row${clickable ? " clickable" : ""}`}
-          style={{ gridTemplateColumns: "1.2fr 1fr 1fr 1fr 0.7fr 0.8fr 1.2fr 1.2fr" }}
+          style={{ gridTemplateColumns: gridCols }}
         >
           <span
             className="mono"
@@ -73,6 +84,40 @@ export function SegmentView({ queueId, shardId, segments, rows, onSegmentClick }
           <StatusBadge status={s.status} />
           <span style={{ fontSize: 12, color: "var(--text-2)" }}>{s.created}</span>
           <span style={{ fontSize: 12, color: "var(--text-3)" }}>{s.closed || "—"}</span>
+          {hasActions && (
+            <div
+              style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              {s.status === "active" && typeof onCloseSegment === "function" && (
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ padding: "4px 10px", fontSize: 12 }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCloseSegment(s);
+                  }}
+                >
+                  Close
+                </button>
+              )}
+              {s.status === "active" && typeof onRolloverSegment === "function" && (
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ padding: "4px 10px", fontSize: 12 }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRolloverSegment(s);
+                  }}
+                >
+                  Rollover
+                </button>
+              )}
+            </div>
+          )}
         </div>
       ))}
     </div>

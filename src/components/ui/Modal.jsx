@@ -46,9 +46,9 @@ export function Modal({ open, onClose, title, subtitle, children, width = 540 })
             {subtitle && (
               <p
                 style={{
-                  fontSize: 13.5,
+                  fontSize: 14,
                   color: "var(--text-2)",
-                  lineHeight: 1.5,
+                  lineHeight: 1.6,
                   maxWidth: 520,
                 }}
               >

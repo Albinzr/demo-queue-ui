@@ -67,24 +67,27 @@ export function Sidebar({ view, setView, state, flow, onAccountChange }) {
 
       <div className="hairline" style={{ margin: "0 20px" }} />
 
-      {/* ── Account selector ─────────────────────────────────── */}
-      <div style={{ padding: "18px 20px 16px" }}>
-        <div className="eyebrow" style={{ marginBottom: 8 }}>Account</div>
+      {/* ── Account (Resources scope) ─────────────────────────── */}
+      <div style={{ padding: "14px 20px 6px" }}>
+        <label htmlFor="sidebar-account" className="eyebrow" style={{ display: "block", marginBottom: 8 }}>
+          Account
+        </label>
         <select
+          id="sidebar-account"
           value={flow.accountId}
-          onChange={(e) => onAccountChange(e.target.value)}
-          style={{ fontSize: 12.5, padding: "8px 10px" }}
+          onChange={(e) => onAccountChange?.(e.target.value)}
+          style={{ width: "100%", fontSize: 13 }}
         >
           {state.accounts.map((a) => (
-            <option key={a.id} value={a.id}>{a.name}</option>
+            <option key={a.id} value={a.id}>
+              {a.name}
+            </option>
           ))}
         </select>
       </div>
 
-      <div className="hairline" style={{ margin: "0 20px" }} />
-
       {/* ── Nav ──────────────────────────────────────────────── */}
-      <nav style={{ padding: "18px 12px 12px", flex: 1, overflowY: "auto" }}>
+      <nav style={{ padding: "12px 12px 12px", flex: 1, overflowY: "auto" }}>
         <div className="eyebrow" style={{ padding: "0 10px 10px" }}>Navigation</div>
         {navItems.map((item) => {
           const Icon = item.icon;

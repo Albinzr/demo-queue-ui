@@ -85,6 +85,119 @@ export function getSegmentsForShard(state, queueId, shardId) {
   ];
 }
 
+/** Deep copy segment rows for a shard (materialize synthetic rows into a mutable list). */
+export function materializeSegmentsList(prev, queueId, shardId) {
+  const key = `${queueId}_${shardId}`;
+  const stored = prev.segments?.[key];
+  if (stored?.length) return stored.map((s) => ({ ...s }));
+  return getSegmentsForShard(prev, queueId, shardId).map((s) => ({ ...s }));
+}
+
+function segmentTimestamp() {
+  return new Date().toISOString().slice(0, 16).replace("T", " ");
+}
+
+function newSegmentId() {
+  return `seg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+}
+
+/** Persist shard list with updated activeSegment for one shard (creates shards[queueId] if needed). */
+function setShardActiveSegment(prev, queueId, shardId, activeSegmentId) {
+  const shardList = getShardList(prev, queueId).map((s) =>
+    s.id === shardId ? { ...s, activeSegment: activeSegmentId } : { ...s }
+  );
+  return { ...prev.shards, [queueId]: shardList };
+}
+
+/**
+ * Repeatedly splits the same lineage shard until the queue reaches targetCount shards (mock).
+ * Caps at maxShards. Stops if a split no longer increases shard count.
+ */
+export function splitShardToTargetCount(prev, queueId, fromShardId, targetCount, maxShards = 32) {
+  let state = prev;
+  const n = getShardList(state, queueId).length;
+  const raw = Math.floor(Number(targetCount));
+  if (!Number.isFinite(raw) || raw <= n) return prev;
+  const target = Math.min(maxShards, raw);
+  let guard = 0;
+  while (getShardList(state, queueId).length < target && guard < 64) {
+    guard += 1;
+    const before = getShardList(state, queueId).length;
+    state = splitShardState(state, queueId, fromShardId);
+    const after = getShardList(state, queueId).length;
+    if (after <= before) break;
+  }
+  return state;
+}
+
+/** Marks an active segment closed (mock). Persists segment list; updates shard active segment if needed. */
+export function closeSegmentState(prev, queueId, shardId, segmentId) {
+  const key = `${queueId}_${shardId}`;
+  const list = materializeSegmentsList(prev, queueId, shardId);
+  const ts = segmentTimestamp();
+  let hit = false;
+  const next = list.map((s) => {
+    if (s.id !== segmentId || s.status !== "active") return { ...s };
+    hit = true;
+    return { ...s, status: "closed", closed: ts, writeQps: 0, readQps: 0 };
+  });
+  if (!hit) return prev;
+  const nextActive = next.find((s) => s.status === "active");
+  const shardList = getShardList(prev, queueId);
+  const sh = shardList.find((s) => s.id === shardId);
+  const activeSeg = nextActive?.id ?? "—";
+  const shardsOut =
+    sh && String(sh.activeSegment) === String(segmentId)
+      ? setShardActiveSegment(prev, queueId, shardId, activeSeg)
+      : prev.shards;
+  return {
+    ...prev,
+    segments: { ...prev.segments, [key]: next },
+    shards: shardsOut,
+  };
+}
+
+/**
+ * Closes an active segment and appends a new empty active segment (rollover).
+ * If segmentId is null, rolls the first active segment in the list.
+ */
+export function rolloverSegmentState(prev, queueId, shardId, segmentId = null) {
+  const key = `${queueId}_${shardId}`;
+  const list = materializeSegmentsList(prev, queueId, shardId);
+  const ts = segmentTimestamp();
+  let idx = segmentId == null ? list.findIndex((s) => s.status === "active") : list.findIndex((s) => s.id === segmentId);
+  if (idx < 0 || list[idx].status !== "active") return prev;
+  const active = list[idx];
+  const closed = {
+    ...active,
+    status: "closed",
+    closed: ts,
+    writeQps: 0,
+    readQps: 0,
+  };
+  const endOff = active.endOffset ?? 0;
+  const newId = newSegmentId();
+  const newSeg = {
+    id: newId,
+    startOffset: endOff,
+    endOffset: endOff,
+    messageCount: 0,
+    sizeMb: 0,
+    status: "active",
+    created: ts,
+    closed: null,
+    writeQps: active.writeQps,
+    readQps: active.readQps,
+  };
+  const next = [...list.slice(0, idx), closed, newSeg, ...list.slice(idx + 1)];
+  const shardsMap = setShardActiveSegment(prev, queueId, shardId, newId);
+  return {
+    ...prev,
+    segments: { ...prev.segments, [key]: next },
+    shards: shardsMap,
+  };
+}
+
 export function splitShardState(prev, queueId, fromShardId) {
   const q = prev.queues.find((x) => x.id === queueId);
   if (!q) return prev;

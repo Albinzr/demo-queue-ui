@@ -13,7 +13,7 @@
  */
 const cwd = process.env.DEMO_Q_CWD || __dirname;
 const staticDir = process.env.DEMO_Q_STATIC || "./demo-queue-ui/dist";
-const port = process.env.DEMO_Q_PORT || "50001";
+const port = process.env.DEMO_Q_PORT || "60001";
 
 module.exports = {
   apps: [
