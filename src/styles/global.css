@@ -502,10 +502,21 @@ label {
 
 /* ── Modal / dialog ─────────────────────────────────────────── */
 
-.modal-backdrop {
-  position: fixed;
+/* Portal inside #main-modal-root: covers main column only (sidebar stays clear) */
+.main-modal-root {
+  position: absolute;
   inset: 0;
-  z-index: 200;
+  z-index: 300;
+  pointer-events: none;
+}
+.main-modal-root:has(.modal-backdrop) {
+  pointer-events: auto;
+}
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -513,6 +524,12 @@ label {
   background: var(--modal-backdrop);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
+}
+
+/* Fallback when portal mounts to document.body */
+.modal-backdrop--viewport {
+  position: fixed;
+  z-index: 10000;
 }
 
 .modal-panel {

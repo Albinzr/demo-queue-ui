@@ -1,9 +1,23 @@
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+
+function getMountNode() {
+  if (typeof document === "undefined") return null;
+  return document.getElementById("main-modal-root");
+}
 
 export function Modal({ open, onClose, title, subtitle, children, width = 540 }) {
   if (!open) return null;
-  return (
-    <div className="modal-backdrop fade-in" onClick={onClose} role="presentation">
+
+  const mount = getMountNode() ?? document.body;
+  const useViewport = mount === document.body;
+
+  const content = (
+    <div
+      className={`modal-backdrop fade-in${useViewport ? " modal-backdrop--viewport" : ""}`}
+      onClick={onClose}
+      role="presentation"
+    >
       <div
         className="modal-panel"
         style={{ maxWidth: width }}
@@ -55,4 +69,6 @@ export function Modal({ open, onClose, title, subtitle, children, width = 540 })
       </div>
     </div>
   );
+
+  return createPortal(content, mount);
 }

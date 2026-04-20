@@ -102,7 +102,15 @@ export default function App() {
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
       <Sidebar view={view} setView={setView} state={state} flow={flow} onAccountChange={onAccountChange} />
-      <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+      <main
+        style={{
+          position: "relative",
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          minWidth: 0,
+        }}
+      >
         <TopBar
           breadcrumbItems={breadcrumbItems}
           user={state.user}
@@ -118,6 +126,8 @@ export default function App() {
             {view === "debug" && <DebugView state={state} />}
           </div>
         </div>
+        {/* Modals portal: overlay covers main column only (not sidebar) */}
+        <div id="main-modal-root" className="main-modal-root" />
       </main>
     </div>
   );
